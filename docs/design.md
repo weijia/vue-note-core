@@ -78,3 +78,84 @@
 </script>
 ```
 或配合 import map 指定 `vue` 版本以避免重复实例化（见 README）。
+
+## 8. 组件对接契约（新增）
+
+`useNotebook()` 的返回值必须与下列四个 UI 组件的 `props / emits` 对齐。说明：
+- `saveStatus`（`'saved' | 'saving' | 'unsaved'`）不在 `useNotebook` 内，由页面层根据编辑器状态派生后下传。
+- 以下映射中 `nb` 代表 `useNotebook()` 的返回值。
+
+### 8.1 vue-note-bar（顶部栏：笔记本切换 / 新建 / 删除 / 同步 / 手动保存）
+
+| 组件 props | 来源（useNotebook） | 组件 emits | 调用（useNotebook） |
+| --- | --- | --- | --- |
+| `notebooks: ProviderInfo[]` | `nb.providers` | `switch(name)` | `nb.switchProvider(name)` |
+| `current: string` | `nb.currentName` | `new()` | 打开 BackendConfig（见 8.4），最终 `nb.createProvider(...)` |
+| `saveStatus: string` | 页面派生 | `delete(name)` | `nb.deleteProvider(name)` |
+| `syncing: boolean` | `nb.syncing` | `config()` | 页面层打开 BackendConfig 弹窗 |
+|  |  | `sync()` | `nb.sync('push')` |
+|  |  | `manual-save()` | `nb.saveCurrentNote(content)` |
+
+### 8.2 vue-note-editor（编辑器：自动保存 / 标签）
+
+| 组件 props | 来源（useNotebook） | 组件 emits | 调用（useNotebook） |
+| --- | --- | --- | --- |
+| `note: SidebarNote \| null` | `nb.currentNote` | `save(content)` | `nb.saveCurrentNote(content)` |
+| `autoSaveDelay: number`（默认 1000） | —（组件内用） | `update-tags(tags)` | `nb.updateCurrentTags(tags)` |
+| `saveStatus: string` | 页面派生 |  |  |
+
+### 8.3 @richard432/vue-note-sidebar（侧边栏：笔记列表 / 搜索过滤由页面层完成）
+
+| 组件 props | 来源（useNotebook） | 组件 emits | 调用（useNotebook） |
+| --- | --- | --- | --- |
+| `notes: SidebarNote[]` | `nb.allNotes`（页面先做 searchAndFilter 再传） | `select(id)` | `nb.selectNote(id)` |
+| `activeId: string` | `nb.currentNote?._id` | `create(path?)` | `nb.createNote(path)` |
+|  |  | `delete(id)` | `nb.deleteNote(id)` |
+|  |  | `move({id,newPath})` | `nb.updateNotePath(id, newPath)` |
+|  |  | `add-tag({id,tag})` | `nb.updateNoteTags(id, 新tags)` |
+|  |  | `remove-tag({id,tag})` | `nb.updateNoteTags(id, 新tags)` |
+
+> 说明：`move` / `add-tag` / `remove-tag` 本质是「更新 note 的 path / tags 后 saveNote」，`useNotebook` 已提供 `updateNotePath(id, newPath)` 与 `updateNoteTags(id, tags)` 两个按 id 操作的方法，页面层据此派生新值后调用即可，无需直接触碰 `currentProvider`。
+
+### 8.4 vue-note-backend-config（后端配置弹窗）
+
+| 组件 props | 来源 | 组件 emits | 调用（useNotebook） |
+| --- | --- | --- | --- |
+| `open: boolean` | 页面层 `v-model` | `save(config)` | `nb.createProvider(type, name, config)` |
+| `backendType: string` | 当前 provider type |  |  |
+
+> 说明：`bar` 的 `new()` 与 `config()` 都只是触发弹窗显示；真正的「创建 / 更新 Provider」统一在 `backend-config` 的 `save` 事件中通过 `nb.createProvider(type, name, config)` 完成，并自动切换（`createProvider` 内部会 `switchProvider`）。
+
+### 8.5 页面层接线示例（伪代码）
+
+```ts
+const nb = useNotebook('默认');
+await nb.init();
+
+// bar
+@switch="(name) => nb.switchProvider(name)"
+@delete="(name) => nb.deleteProvider(name)"
+@sync="() => nb.sync('push')"
+@manual-save="(content) => nb.saveCurrentNote(content)"
+:notebooks="nb.providers.value" :current="nb.currentName.value" :syncing="nb.syncing.value"
+
+// editor
+@save="(content) => nb.saveCurrentNote(content)"
+@update-tags="(tags) => nb.updateCurrentTags(tags)"
+:note="nb.currentNote.value"
+
+// sidebar（页面先过滤）
+const filtered = computed(() => searchAndFilter(nb.allNotes.value));
+@select="(id) => nb.selectNote(id)"
+@create="(path) => nb.createNote(path)"
+@delete="(id) => nb.deleteNote(id)"
+@move="({id,newPath}) => nb.updateNotePath(id, newPath)"
+@add-tag="({id,tag}) => nb.updateNoteTags(id, [...currentTags(id), tag])"
+@remove-tag="({id,tag}) => nb.updateNoteTags(id, currentTags(id).filter(t => t !== tag))"
+:notes="filtered" :activeId="nb.currentNote.value?._id"
+
+// backend-config
+@save="(config) => nb.createProvider(config.type, config.name, config)"
+:open="showConfig" :backendType="nb.currentProvider.value?.type"
+```
+

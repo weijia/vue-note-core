@@ -127,7 +127,9 @@ const result = await engine.sync('both'); // { pushed, pulled, conflicts, errors
 | `loading` / `error` | `Ref<boolean>` / `Ref<string>` |
 | `syncing` / `syncProgress` / `syncError` | `Ref<boolean>` / `Ref<string>` / `Ref<string \| null>` |
 
-方法：`init()` · `switchProvider(name)` · `createProvider(type,name,config)` · `deleteProvider(name)` · `selectNote(id)` · `saveCurrentNote(content)` · `createNote(path?)` · `updateCurrentTags(tags)` · `sync(direction?)`。
+方法：`init()` · `switchProvider(name)` · `createProvider(type,name,config)` · `deleteProvider(name)` · `selectNote(id)` · `saveCurrentNote(content)` · `createNote(path?)` · `updateCurrentTags(tags)` · `deleteNote(id)` · `updateNotePath(id,newPath)` · `updateNoteTags(id,tags)` · `sync(direction?)`。
+
+> 其中 `deleteNote` / `updateNotePath` / `updateNoteTags` 为按 id 操作的方法，用于对接 `vue-note-sidebar` 的 `delete` / `move` / `add-tag` / `remove-tag` 事件（详见 `docs/design.md` 第 8 节「组件对接契约」）。
 
 ## 开发
 

@@ -50,6 +50,9 @@ export interface UseNotebookReturn {
   saveCurrentNote(content: string): Promise<void>;
   createNote(path?: string): Promise<void>;
   updateCurrentTags(tags: string[]): Promise<void>;
+  deleteNote(id: string): Promise<void>;
+  updateNotePath(id: string, newPath: string): Promise<void>;
+  updateNoteTags(id: string, tags: string[]): Promise<void>;
   sync(direction?: SyncDirection): Promise<void>;
 }
 
@@ -239,6 +242,39 @@ export function useNotebook(initialName?: string): UseNotebookReturn {
     await refreshNotes();
   }
 
+  async function deleteNote(id: string): Promise<void> {
+    if (!currentProvider.value) return;
+    await currentProvider.value.deleteNote(id);
+    if (currentNote.value && currentNote.value._id === id) {
+      currentNote.value = null;
+    }
+    await refreshNotes();
+  }
+
+  async function updateNotePath(id: string, newPath: string): Promise<void> {
+    if (!currentProvider.value) return;
+    const note = await currentProvider.value.getNote(id);
+    if (!note) return;
+    const updated: SidebarNote = { ...note, path: newPath };
+    const saved = await currentProvider.value.saveNote(updated);
+    if (currentNote.value && currentNote.value._id === id) {
+      currentNote.value = saved;
+    }
+    await refreshNotes();
+  }
+
+  async function updateNoteTags(id: string, tags: string[]): Promise<void> {
+    if (!currentProvider.value) return;
+    const note = await currentProvider.value.getNote(id);
+    if (!note) return;
+    const updated: SidebarNote = { ...note, tags };
+    const saved = await currentProvider.value.saveNote(updated);
+    if (currentNote.value && currentNote.value._id === id) {
+      currentNote.value = saved;
+    }
+    await refreshNotes();
+  }
+
   async function sync(direction?: SyncDirection): Promise<void> {
     syncing.value = true;
     syncError.value = null;
@@ -298,6 +334,9 @@ export function useNotebook(initialName?: string): UseNotebookReturn {
     saveCurrentNote,
     createNote,
     updateCurrentTags,
+    deleteNote,
+    updateNotePath,
+    updateNoteTags,
     sync,
   };
 }

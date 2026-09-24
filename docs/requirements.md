@@ -69,3 +69,14 @@ localStorage：`notebook_providers`（ProviderInfo[]）、`notebook_current`（�
 - 不引入 UI 框架。
 - 所有 I/O 错误 catch 并写入 `error/syncError`。
 - 同步操作不阻塞编辑器。
+
+## 10. 组件对接契约（新增）
+
+`useNotebook()` 的返回值必须与下列 UI 组件的 `props / emits` 对齐（详细映射见表与示例，见 `docs/design.md` 第 8 节）：
+
+- **vue-note-bar**：`notebooks←providers`、`current←currentName`、`syncing←syncing`；`switch→switchProvider`、`delete→deleteProvider`、`sync→sync('push')`、`manual-save→saveCurrentNote`、`new/config` 由页面层打开 BackendConfig。
+- **vue-note-editor**：`note←currentNote`、`autoSaveDelay`（组件内，默认 1000）、`saveStatus`（页面派生）；`save→saveCurrentNote`、`update-tags→updateCurrentTags`。
+- **@richard432/vue-note-sidebar**：`notes←allNotes`（页面先 searchAndFilter）、`activeId←currentNote?._id`；`select→selectNote`、`create→createNote`、`delete→deleteNote`、`move→updateNotePath`、`add-tag/remove-tag→updateNoteTags`。
+- **vue-note-backend-config**：`open`（v-model）、`backendType`；`save→createProvider(type, name, config)`。
+
+> 说明：`useNotebook` 新增了 `deleteNote(id)`、`updateNotePath(id, newPath)`、`updateNoteTags(id, tags)` 三个按 id 操作的方法，专门用于满足侧边栏的 `delete / move / add-tag / remove-tag` 契约；`saveStatus` 不在库内，由页面层根据编辑器状态派生。
