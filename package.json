@@ -1,0 +1,73 @@
+{
+  "name": "@richard432/note-core",
+  "version": "0.1.0",
+  "description": "Vue 3 组合式函数的笔记核心库：内置 PouchDB / Git / WebDAV 多端 Provider 与 SyncEngine 同步引擎，纯 TypeScript，ESM 构建，可被网页直接调用。",
+  "type": "module",
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs"
+    },
+    "./useNotebook": {
+      "types": "./dist/useNotebook.d.ts",
+      "import": "./dist/useNotebook.mjs"
+    },
+    "./providers": {
+      "types": "./dist/providers.d.ts",
+      "import": "./dist/providers.mjs"
+    },
+    "./sync": {
+      "types": "./dist/sync.d.ts",
+      "import": "./dist/sync.mjs"
+    },
+    "./style.css": "./dist/style.css"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "docs"
+  ],
+  "sideEffects": [
+    "*.css"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "vue",
+    "notebook",
+    "pouchdb",
+    "git",
+    "webdav",
+    "sync",
+    "composable",
+    "typescript"
+  ],
+  "author": "richard432",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "vue": "^3.3.0"
+  },
+  "dependencies": {
+    "@isomorphic-git/lightning-fs": "^4.6.0",
+    "isomorphic-git": "^1.27.0",
+    "pouchdb-browser": "^9.0.0",
+    "webdav": "^5.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.4.5",
+    "vite": "^5.4.0",
+    "vite-plugin-dts": "^3.9.1",
+    "vue": "^3.4.0"
+  }
+}

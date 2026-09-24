@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@richard432/note-core 演示</title>
+    <script type="importmap">
+      {
+        "imports": {
+          "vue": "https://esm.sh/vue@3",
+          "@richard432/note-core": "https://esm.sh/@richard432/note-core?external=vue"
+        }
+      }
+    </script>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 24px; color: #1f2328; }
+      .layout { display: flex; gap: 16px; }
+      .side { width: 240px; border: 1px solid #e3e6ea; border-radius: 8px; }
+      .item { padding: 6px 10px; cursor: pointer; border-bottom: 1px solid #f0f2f4; }
+      .item:hover { background: #f6f8fa; }
+      .item.active { background: #eef2ff; font-weight: 600; }
+      textarea { width: 100%; min-height: 320px; border: 1px solid #e3e6ea; border-radius: 8px; padding: 12px; font-size: 14px; }
+      .err { color: #b91c1c; font-size: 13px; }
+      button { padding: 6px 12px; border-radius: 6px; border: 1px solid #d0d7de; background: #f6f8fa; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <script type="module">
+      import { createApp, h, ref, onMounted } from 'vue';
+      import { useNotebook } from '@richard432/note-core';
+
+      const App = {
+        setup() {
+          const nb = useNotebook('demo');
+          const content = ref('');
+
+          onMounted(async () => {
+            await nb.init();
+            if (nb.providers.value.length === 0) {
+              await nb.createProvider('pouchdb', '本地', { pouchdb: { prefix: 'nb-' } });
+            }
+          });
+
+          async function select(id) {
+            await nb.selectNote(id);
+            content.value = nb.currentNote.value ? nb.currentNote.value.content : '';
+          }
+          async function save() {
+            await nb.saveCurrentNote(content.value);
+          }
+          async function add() {
+            await nb.createNote('/未分类');
+            if (nb.currentNote.value) content.value = '';
+          }
+          async function sync() {
+            await nb.sync('both');
+          }
+
+          return () =>
+            h('div', [
+              h('h2', '@richard432/note-core 演示'),
+              nb.loading.value ? h('p', '加载中...') : null,
+              nb.error.value ? h('p', { class: 'err' }, nb.error.value) : null,
+              nb.syncError.value ? h('p', { class: 'err' }, '同步: ' + nb.syncError.value) : null,
+              nb.syncing.value ? h('p', nb.syncProgress.value || '同步中...') : null,
+              h('div', { class: 'layout' }, [
+                h('div', { class: 'side' }, [
+                  h('button', { onClick: add }, '+ 新建'),
+                  h('button', { onClick: sync, style: 'margin-left:8px' }, '同步'),
+                  ...nb.allNotes.value.map((n) =>
+                    h(
+                      'div',
+                      {
+                        class: 'item' + (nb.currentNote.value && nb.currentNote.value._id === n._id ? ' active' : ''),
+                        onClick: () => select(n._id),
+                      },
+                      n.title || n._id,
+                    ),
+                  ),
+                ]),
+                h('div', { style: 'flex:1' }, [
+                  h('textarea', {
+                    value: content.value,
+                    onInput: (e) => (content.value = e.target.value),
+                  }),
+                  h('br'),
+                  h('button', { onClick: save }, '保存'),
+                ]),
+              ]),
+            ]);
+        },
+      };
+
+      createApp(App).mount('#app');
+    </script>
+  </body>
+</html>
