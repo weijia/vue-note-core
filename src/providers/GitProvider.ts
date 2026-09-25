@@ -8,6 +8,7 @@ import {
   NoteChange,
 } from '../types';
 import { uuid, parseFrontmatter, stringifyFrontmatter, sanitize } from '../utils';
+import { logGit } from '../debug';
 
 /**
  * 基于 isomorphic-git + lightning-fs 的浏览器内 Git Provider。
@@ -48,17 +49,25 @@ export class GitProvider implements NotebookProvider {
 
     if (!isRepo) {
       if (g.repoUrl) {
-        await git.clone({
-          fs: this.fs,
-          http,
-          dir: this.dir,
-          url: g.repoUrl,
-          ref: g.branch || 'main',
-          singleBranch: true,
-          onAuth: g.token ? () => ({ username: 'token', password: g.token }) : undefined,
-        });
+        logGit.log('clone START', { url: g.repoUrl, branch: g.branch || 'main' });
+        try {
+          await git.clone({
+            fs: this.fs,
+            http,
+            dir: this.dir,
+            url: g.repoUrl,
+            ref: g.branch || 'main',
+            singleBranch: true,
+            onAuth: g.token ? () => ({ username: 'token', password: g.token }) : undefined,
+          });
+          logGit.log('clone OK', g.repoUrl);
+        } catch (e: any) {
+          logGit.error('clone FAIL', g.repoUrl, e);
+          throw e;
+        }
       } else {
         await git.init({ fs: this.fs, dir: this.dir });
+        logGit.log('init repo OK', this.dir);
         if (g.repoUrl) {
           await git.addRemote({
             fs: this.fs,
@@ -66,13 +75,18 @@ export class GitProvider implements NotebookProvider {
             remote: 'origin',
             url: g.repoUrl,
           });
+          logGit.log('addRemote OK', g.repoUrl);
         }
       }
+    } else {
+      logGit.log('reuse existing repo', this.dir);
     }
     await this.indexNotes();
+    logGit.log('init OK', { name: this.name, dir: this.dir });
   }
 
   async destroy(): Promise<void> {
+    logGit.log('destroy', this.name);
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
@@ -111,6 +125,7 @@ export class GitProvider implements NotebookProvider {
     await this.fs.writeFile(file, body);
     await this.commit('update ' + updated._id);
     this.known.set(updated._id, updated.updatedAt || 0);
+    logGit.log('saveNote OK', { id: updated._id, file });
     return updated;
   }
 
@@ -146,6 +161,7 @@ export class GitProvider implements NotebookProvider {
     );
     await this.commit('create ' + rel);
     this.known.set(note._id, note.updatedAt || 0);
+    logGit.log('createNote OK', { id: note._id, file });
     return note;
   }
 
@@ -155,6 +171,7 @@ export class GitProvider implements NotebookProvider {
     await this.fs.unlink(file).catch(() => undefined);
     await this.commit('delete ' + id);
     this.known.delete(id);
+    logGit.log('deleteNote OK', id);
   }
 
   watchChanges(callback: (change: NoteChange) => void): () => void {
@@ -165,15 +182,24 @@ export class GitProvider implements NotebookProvider {
         const map = new Map(notes.map((n) => [n._id, n]));
         for (const n of notes) {
           const prev = this.known.get(n._id);
-          if (prev === undefined) callback({ type: 'add', note: n });
-          else if (prev !== (n.updatedAt || 0)) callback({ type: 'update', note: n });
+          if (prev === undefined) {
+            logGit.log('poll change', { type: 'add', id: n._id });
+            callback({ type: 'add', note: n });
+          } else if (prev !== (n.updatedAt || 0)) {
+            logGit.log('poll change', { type: 'update', id: n._id });
+            callback({ type: 'update', note: n });
+          }
         }
         for (const id of this.known.keys()) {
-          if (!map.has(id)) callback({ type: 'delete', noteId: id });
+          if (!map.has(id)) {
+            logGit.log('poll change', { type: 'delete', id });
+            callback({ type: 'delete', noteId: id });
+          }
         }
         this.known = new Map(notes.map((n) => [n._id, n.updatedAt || 0]));
-      } catch {
-        /* 轮询错误忽略，下次再试 */
+      } catch (e: any) {
+        // 轮询错误忽略，下次再试；只记录日志方便排查
+        logGit.warn('poll ERROR', e);
       }
     }, 3000);
     return () => {
@@ -194,9 +220,12 @@ export class GitProvider implements NotebookProvider {
     const result = { pushed: 0, pulled: 0, conflicts: 0, errors: [] as string[] };
     const g = this.config.git;
     if (!g || !g.repoUrl) {
-      result.errors.push('GitProvider 未配置 repoUrl，无法同步');
+      const message = 'GitProvider 未配置 repoUrl，无法同步';
+      logGit.warn('sync SKIP', message);
+      result.errors.push(message);
       return result;
     }
+    logGit.log('sync START', { direction, url: g.repoUrl, branch: g.branch || 'main' });
     const onAuth = g.token ? () => ({ username: 'token', password: g.token }) : undefined;
     const branch = g.branch || 'main';
     try {
@@ -216,8 +245,10 @@ export class GitProvider implements NotebookProvider {
         result.pushed++;
       }
     } catch (e: any) {
+      logGit.error('sync FAIL', e);
       result.errors.push(String(e && e.message ? e.message : e));
     }
+    logGit.log('sync DONE', result);
     return result;
   }
 
@@ -278,12 +309,18 @@ export class GitProvider implements NotebookProvider {
   }
 
   private async commit(message: string): Promise<void> {
-    await git.add({ fs: this.fs, dir: this.dir, filepath: '.' });
-    await git.commit({
-      fs: this.fs,
-      dir: this.dir,
-      message,
-      author: { name: 'note-core', email: 'note-core@local' },
-    });
+    try {
+      await git.add({ fs: this.fs, dir: this.dir, filepath: '.' });
+      await git.commit({
+        fs: this.fs,
+        dir: this.dir,
+        message,
+        author: { name: 'note-core', email: 'note-core@local' },
+      });
+      logGit.log('commit OK', message);
+    } catch (e: any) {
+      logGit.error('commit FAIL', message, e);
+      throw e;
+    }
   }
 }

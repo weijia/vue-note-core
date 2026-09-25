@@ -2,6 +2,7 @@
  * 通用工具：uuid、文件名清洗、frontmatter 解析 / 序列化
  * 注意：本文件刻意不使用任何反斜杠字面量（避免转义/控制字符问题）。
  */
+import { logUtils } from './debug';
 
 const NL = String.fromCharCode(10); // 换行
 const CR = String.fromCharCode(13); // 回车
@@ -28,7 +29,11 @@ export function sanitize(name: string): string {
     s = s.split(ch).join('_');
   }
   s = s.trim();
-  if (!s) s = uuid().slice(0, 8);
+  if (!s) {
+    // 标题全由非法字符构成时静默退化，这里给出提示便于排查文件名异常
+    logUtils.warn('sanitize 入参清洗后为空，已回退为随机名');
+    s = uuid().slice(0, 8);
+  }
   return s.slice(0, 80);
 }
 

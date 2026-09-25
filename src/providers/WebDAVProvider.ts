@@ -6,6 +6,7 @@ import {
   NoteChange,
 } from '../types';
 import { uuid, parseFrontmatter, stringifyFrontmatter, sanitize } from '../utils';
+import { logWebDAV } from '../debug';
 
 function trimSlash(s: string): string {
   let r = s || '';
@@ -45,12 +46,19 @@ export class WebDAVProvider implements NotebookProvider {
       password: w.password,
     });
     this.rootPath = trimSlash(w.rootPath || '/') || '/';
-    // 连接测试：列出根目录
-    await this.client.getDirectoryContents(this.rootPath);
+    // 连接测试：列出根目录（注意：密码仅用于连接，不进入日志）
+    try {
+      await this.client.getDirectoryContents(this.rootPath);
+    } catch (e: any) {
+      logWebDAV.error('init FAIL 连接测试未通过', { url: w.url, rootPath: this.rootPath }, e);
+      throw e;
+    }
     await this.indexNotes();
+    logWebDAV.log('init OK', { name: this.name, url: w.url, rootPath: this.rootPath });
   }
 
   async destroy(): Promise<void> {
+    logWebDAV.log('destroy', this.name);
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
@@ -82,6 +90,7 @@ export class WebDAVProvider implements NotebookProvider {
     );
     await this.client.putFileContents(file, body);
     this.known.set(updated._id, updated.updatedAt || 0);
+    logWebDAV.log('saveNote OK', { id: updated._id, file });
     return updated;
   }
 
@@ -108,6 +117,7 @@ export class WebDAVProvider implements NotebookProvider {
       ),
     );
     this.known.set(note._id, note.updatedAt || 0);
+    logWebDAV.log('createNote OK', { id: note._id, file });
     return note;
   }
 
@@ -116,6 +126,7 @@ export class WebDAVProvider implements NotebookProvider {
     const file = this.rootPath + '/' + this.fixId(id);
     await this.client.deleteFile(file).catch(() => undefined);
     this.known.delete(id);
+    logWebDAV.log('deleteNote OK', id);
   }
 
   watchChanges(callback: (change: NoteChange) => void): () => void {
@@ -126,15 +137,24 @@ export class WebDAVProvider implements NotebookProvider {
         const map = new Map(notes.map((n) => [n._id, n]));
         for (const n of notes) {
           const prev = this.known.get(n._id);
-          if (prev === undefined) callback({ type: 'add', note: n });
-          else if (prev !== (n.updatedAt || 0)) callback({ type: 'update', note: n });
+          if (prev === undefined) {
+            logWebDAV.log('poll change', { type: 'add', id: n._id });
+            callback({ type: 'add', note: n });
+          } else if (prev !== (n.updatedAt || 0)) {
+            logWebDAV.log('poll change', { type: 'update', id: n._id });
+            callback({ type: 'update', note: n });
+          }
         }
         for (const id of this.known.keys()) {
-          if (!map.has(id)) callback({ type: 'delete', noteId: id });
+          if (!map.has(id)) {
+            logWebDAV.log('poll change', { type: 'delete', id });
+            callback({ type: 'delete', noteId: id });
+          }
         }
         this.known = new Map(notes.map((n) => [n._id, n.updatedAt || 0]));
-      } catch {
-        /* 轮询错误忽略 */
+      } catch (e: any) {
+        // 轮询错误忽略，下次再试；只记录日志方便排查
+        logWebDAV.warn('poll ERROR', e);
       }
     }, 5000);
     return () => {

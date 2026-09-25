@@ -1,4 +1,5 @@
 import { NotebookProvider, ProviderConfig } from '../types';
+import { logProvider } from '../debug';
 import { PouchDBProvider } from './PouchDBProvider';
 import { GitProvider } from './GitProvider';
 import { WebDAVProvider } from './WebDAVProvider';
@@ -11,6 +12,8 @@ export function createProvider(
   name: string,
   config: ProviderConfig,
 ): NotebookProvider {
+  logProvider.log('createProvider', { type, name });
+
   switch (type) {
     case 'pouchdb':
       return new PouchDBProvider(name);
@@ -18,7 +21,10 @@ export function createProvider(
       return new GitProvider(name);
     case 'webdav':
       return new WebDAVProvider(name);
-    default:
-      throw new Error('未知的 Provider 类型: ' + type);
+    default: {
+      const message = '未知的 Provider 类型: ' + type;
+      logProvider.error('createProvider FAIL', message);
+      throw new Error(message);
+    }
   }
 }

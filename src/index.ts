@@ -7,6 +7,23 @@ export * from './sync';
 export { useNotebook } from './useNotebook';
 export type { UseNotebookReturn } from './useNotebook';
 
+// 调试开关 API（详见 ./debug）
+export {
+  DEBUG_NAMESPACES,
+  createDebugLogger,
+  describeDebug,
+  disableDebug,
+  enableDebug,
+  enabledDebugNamespaces,
+  initDebug,
+  isDebugOn,
+  listDebug,
+  matchesNamespace,
+  setDebug,
+  silenceDebug,
+} from './debug';
+export type { DebugNamespace } from './debug';
+
 import { useNotebook } from './useNotebook';
 import { createProvider } from './providers';
 import { SyncEngine } from './sync';

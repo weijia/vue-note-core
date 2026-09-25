@@ -1,6 +1,7 @@
 import { NotebookProvider, ProviderConfig, SyncResult, SidebarNote } from '../types';
 import { PouchDBProvider } from '../providers/PouchDBProvider';
 import { createProvider } from '../providers/factory';
+import { logSync } from '../debug';
 
 export type SyncDirection = 'push' | 'pull' | 'both';
 
@@ -38,6 +39,7 @@ export class SyncEngine {
     if (this.config.git) type = 'git';
     else if (this.config.pouchdb) type = 'pouchdb';
     else if (this.config.webdav) type = 'webdav';
+    logSync.log('getRemote', { type, name: this.remoteName });
     const remote = createProvider(type, this.remoteName, this.config);
     await remote.init(this.config);
     this.remote = remote;
@@ -51,6 +53,7 @@ export class SyncEngine {
       const localNotes = await this.local.listNotes();
       const remoteNotes = await remote.listNotes().catch(() => [] as SidebarNote[]);
       const remoteMap = new Map(remoteNotes.map((n) => [n._id, n]));
+      logSync.log('push START', { local: localNotes.length, remote: remoteNotes.length });
 
       const total = localNotes.length;
       let cur = 0;
@@ -70,11 +73,18 @@ export class SyncEngine {
           } else if (localTs < remoteTs) {
             // 远端更新，本地较旧 -> 冲突（不覆盖远端）
             result.conflicts++;
+            logSync.warn('push CONFLICT 远端较新，已跳过', {
+              id: note._id,
+              localTs,
+              remoteTs,
+            });
           }
           // 相等则跳过
         }
       }
+      logSync.log('push DONE', result);
     } catch (e: any) {
+      logSync.error('push FAIL', e);
       result.errors.push(String(e && e.message ? e.message : e));
     }
     return result;
@@ -87,6 +97,7 @@ export class SyncEngine {
       const remoteNotes = await remote.listNotes();
       const localNotes = await this.local.listNotes().catch(() => [] as SidebarNote[]);
       const localMap = new Map(localNotes.map((n) => [n._id, n]));
+      logSync.log('pull START', { remote: remoteNotes.length, local: localNotes.length });
 
       const total = remoteNotes.length;
       let cur = 0;
@@ -105,10 +116,17 @@ export class SyncEngine {
             result.pulled++;
           } else if (remoteTs < localTs) {
             result.conflicts++;
+            logSync.warn('pull CONFLICT 本地较新，已跳过', {
+              id: note._id,
+              remoteTs,
+              localTs,
+            });
           }
         }
       }
+      logSync.log('pull DONE', result);
     } catch (e: any) {
+      logSync.error('pull FAIL', e);
       result.errors.push(String(e && e.message ? e.message : e));
     }
     return result;
@@ -116,6 +134,7 @@ export class SyncEngine {
 
   async sync(direction: SyncDirection = 'both'): Promise<SyncResult> {
     const result: SyncResult = { pushed: 0, pulled: 0, conflicts: 0, errors: [] };
+    logSync.log('sync START', direction);
     if (direction === 'push' || direction === 'both') {
       const r = await this.push();
       result.pushed += r.pushed;
@@ -128,11 +147,13 @@ export class SyncEngine {
       result.conflicts += r.conflicts;
       result.errors.push(...r.errors);
     }
+    logSync.log('sync DONE', result);
     return result;
   }
 
   /** 释放远端连接 */
   async destroy(): Promise<void> {
+    logSync.log('destroy');
     if (this.remote) {
       await this.remote.destroy().catch(() => undefined);
       this.remote = null;

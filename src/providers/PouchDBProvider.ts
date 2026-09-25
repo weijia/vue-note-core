@@ -6,6 +6,7 @@ import {
   NoteChange,
 } from '../types';
 import { uuid, safeName } from '../utils';
+import { logPouchDB } from '../debug';
 
 interface PouchDoc {
   _id: string;
@@ -39,12 +40,19 @@ export class PouchDBProvider implements NotebookProvider {
     const prefix = this.config.pouchdb?.prefix || 'nb-';
     // Bug 修复：名称含 / 或特殊字符时用 encodeURIComponent，避免静默失败
     const dbName = prefix + safeName(this.name);
-    this.db = new PouchDB(dbName);
-    await this.db.info();
-    this.seen = new Set();
+    try {
+      this.db = new PouchDB(dbName);
+      await this.db.info();
+      this.seen = new Set();
+      logPouchDB.log('init OK', { name: this.name, dbName });
+    } catch (e: any) {
+      logPouchDB.error('init FAIL', { name: this.name, dbName }, e);
+      throw e;
+    }
   }
 
   async destroy(): Promise<void> {
+    logPouchDB.log('destroy', this.name);
     // 先取消 live changes，再关闭数据库，最后清理引用
     if (this.changesFeed) {
       try {
@@ -71,12 +79,14 @@ export class PouchDBProvider implements NotebookProvider {
       notes.push(this.docToNote(doc));
       this.seen.add(doc._id);
     }
+    logPouchDB.log('listNotes', { count: notes.length });
     return notes;
   }
 
   async getNote(id: string): Promise<SidebarNote | null> {
     if (!this.db) throw new Error('PouchDBProvider 尚未初始化: ' + this.name);
     const doc = (await this.db.get(id).catch(() => null)) as PouchDoc | null;
+    if (!doc) logPouchDB.warn('getNote MISS', id);
     return doc ? this.docToNote(doc) : null;
   }
 
@@ -99,6 +109,7 @@ export class PouchDBProvider implements NotebookProvider {
 
     const put = await this.db.put(doc);
     this.seen.add(put.id);
+    logPouchDB.log('saveNote OK', { id: put.id, rev: put.rev });
     return { ...note, _id: put.id, updatedAt: now };
   }
 
@@ -111,6 +122,7 @@ export class PouchDBProvider implements NotebookProvider {
       tags: [],
       updatedAt: Date.now(),
     };
+    logPouchDB.log('createNote', { id: note._id, path: note.path });
     return this.saveNote(note);
   }
 
@@ -119,6 +131,7 @@ export class PouchDBProvider implements NotebookProvider {
     const doc = await this.db.get(id);
     await this.db.remove(doc);
     this.seen.delete(id);
+    logPouchDB.log('deleteNote OK', id);
   }
 
   watchChanges(callback: (change: NoteChange) => void): () => void {
@@ -141,17 +154,21 @@ export class PouchDBProvider implements NotebookProvider {
       if (!doc || doc._id.startsWith('_') || doc.type !== 'note') return;
       if (change.deleted) {
         this.seen.delete(doc._id);
+        logPouchDB.log('change', { type: 'delete', id: doc._id });
         callback({ type: 'delete', noteId: doc._id });
         return;
       }
       const isNew = !this.seen.has(doc._id);
       this.seen.add(doc._id);
+      logPouchDB.log('change', { type: isNew ? 'add' : 'update', id: doc._id });
       callback({ type: isNew ? 'add' : 'update', note: this.docToNote(doc) });
     });
 
-    feed.on('error', () => {
-      /* 错误由上层 error ref 捕获，这里静默避免崩溃 */
+    feed.on('error', (err: any) => {
+      // 错误由上层 error ref 捕获，这里只记录日志避免崩溃
+      logPouchDB.error('changesFeed ERROR', err);
     });
+    logPouchDB.log('watchChanges subscribed', this.name);
 
     return () => {
       if (this.changesFeed) {

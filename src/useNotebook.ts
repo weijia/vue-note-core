@@ -9,6 +9,7 @@ import {
 import { createProvider } from './providers/factory';
 import { PouchDBProvider } from './providers/PouchDBProvider';
 import { SyncEngine, SyncDirection } from './sync/SyncEngine';
+import { logNotebook } from './debug';
 
 const PROVIDERS_KEY = 'notebook_providers';
 const CURRENT_KEY = 'notebook_current';
@@ -83,8 +84,12 @@ export function useNotebook(initialName?: string): UseNotebookReturn {
   }
 
   async function connect(name: string): Promise<void> {
-    if (connecting) return;
+    if (connecting) {
+      logNotebook.warn('connect SKIP 已有连接进行中', name);
+      return;
+    }
     connecting = true;
+    logNotebook.log('connect START', name);
     try {
       const info = providers.value.find((p) => p.name === name);
       if (!info) throw new Error('找不到 provider: ' + name);
@@ -105,13 +110,19 @@ export function useNotebook(initialName?: string): UseNotebookReturn {
         /* ignore */
       }
 
-      watchUnsub = provider.watchChanges((_change: NoteChange) => {
+      watchUnsub = provider.watchChanges((change: NoteChange) => {
+        logNotebook.log('watchChanges 触发', change.type, change.noteId ?? change.note?._id);
         refreshNotes().catch((e) => {
+          logNotebook.error('refreshNotes 失败', e);
           error.value = String(e && e.message ? e.message : e);
         });
       });
 
       await refreshNotes();
+      logNotebook.log('connect OK', { name, type: info.type, notes: allNotes.value.length });
+    } catch (e: any) {
+      logNotebook.error('connect FAIL', name, e);
+      throw e;
     } finally {
       connecting = false;
     }
@@ -119,11 +130,13 @@ export function useNotebook(initialName?: string): UseNotebookReturn {
 
   async function init(): Promise<void> {
     if (initPromise) return initPromise;
+    logNotebook.log('init START', { initialName });
     initPromise = (async () => {
       loading.value = true;
       error.value = '';
       try {
         providers.value = loadProviders();
+        logNotebook.log('已加载 provider 列表', providers.value.map((p) => p.name));
         let name = initialName || '';
         try {
           name = name || localStorage.getItem(CURRENT_KEY) || '';
@@ -132,7 +145,9 @@ export function useNotebook(initialName?: string): UseNotebookReturn {
         }
         if (!name && providers.value.length) name = providers.value[0].name;
         if (name) await connect(name);
+        else logNotebook.warn('init 完成，但没有可连接的 provider');
       } catch (e: any) {
+        logNotebook.error('init FAIL', e);
         error.value = String(e && e.message ? e.message : e);
       } finally {
         loading.value = false;
@@ -142,6 +157,7 @@ export function useNotebook(initialName?: string): UseNotebookReturn {
   }
 
   async function switchProvider(name: string): Promise<void> {
+    logNotebook.log('switchProvider', { from: currentName.value, to: name });
     loading.value = true;
     error.value = '';
     try {
@@ -155,7 +171,9 @@ export function useNotebook(initialName?: string): UseNotebookReturn {
         currentProvider.value = null;
       }
       await connect(name);
+      logNotebook.log('switchProvider OK', name);
     } catch (e: any) {
+      logNotebook.error('switchProvider FAIL', name, e);
       error.value = String(e && e.message ? e.message : e);
     } finally {
       loading.value = false;
@@ -170,17 +188,21 @@ export function useNotebook(initialName?: string): UseNotebookReturn {
     loading.value = true;
     error.value = '';
     let probe: NotebookProvider | null = null;
+    // 注意：config 可能含 token / 密码，日志中只输出类型与名称
+    logNotebook.log('createProvider START', { type, name });
     try {
       const info: ProviderInfo = { name, type: type as ProviderInfo['type'], config };
       // 先用临时实例验证配置可初始化
       probe = createProvider(type, name, config);
       await probe.init(config);
+      logNotebook.log('createProvider 配置校验通过', { type, name });
 
       const list = providers.value.filter((p) => p.name !== name).concat(info);
       providers.value = list;
       saveProviders(list);
       await switchProvider(name);
     } catch (e: any) {
+      logNotebook.error('createProvider FAIL', { type, name }, e);
       error.value = String(e && e.message ? e.message : e);
     } finally {
       // 探针实例的使命已完成，释放
@@ -191,9 +213,12 @@ export function useNotebook(initialName?: string): UseNotebookReturn {
 
   async function deleteProvider(name: string): Promise<void> {
     if (providers.value.length <= 1) {
-      error.value = '至少保留一个 provider';
+      const message = '至少保留一个 provider';
+      logNotebook.warn('deleteProvider SKIP', name, message);
+      error.value = message;
       return;
     }
+    logNotebook.log('deleteProvider', name);
     loading.value = true;
     error.value = '';
     try {
@@ -203,7 +228,9 @@ export function useNotebook(initialName?: string): UseNotebookReturn {
       if (currentName.value === name) {
         await switchProvider(list[0].name);
       }
+      logNotebook.log('deleteProvider OK', name);
     } catch (e: any) {
+      logNotebook.error('deleteProvider FAIL', name, e);
       error.value = String(e && e.message ? e.message : e);
     } finally {
       loading.value = false;
@@ -211,12 +238,19 @@ export function useNotebook(initialName?: string): UseNotebookReturn {
   }
 
   async function selectNote(id: string): Promise<void> {
-    if (!currentProvider.value) return;
+    if (!currentProvider.value) {
+      logNotebook.warn('selectNote SKIP 无当前 provider', id);
+      return;
+    }
     currentNote.value = await currentProvider.value.getNote(id);
+    logNotebook.log('selectNote', { id, found: Boolean(currentNote.value) });
   }
 
   async function saveCurrentNote(content: string): Promise<void> {
-    if (!currentProvider.value || !currentNote.value) return;
+    if (!currentProvider.value || !currentNote.value) {
+      logNotebook.warn('saveCurrentNote SKIP 无 provider 或无当前笔记');
+      return;
+    }
     const updated: SidebarNote = {
       ...currentNote.value,
       content,
@@ -225,67 +259,99 @@ export function useNotebook(initialName?: string): UseNotebookReturn {
     const saved = await currentProvider.value.saveNote(updated);
     currentNote.value = saved;
     await refreshNotes();
+    logNotebook.log('saveCurrentNote OK', { id: saved._id, length: content.length });
   }
 
   async function createNote(path?: string): Promise<void> {
-    if (!currentProvider.value) return;
+    if (!currentProvider.value) {
+      logNotebook.warn('createNote SKIP 无当前 provider');
+      return;
+    }
     const note = await currentProvider.value.createNote(path);
     await refreshNotes();
     currentNote.value = note;
+    logNotebook.log('createNote OK', { id: note._id, path });
   }
 
   async function updateCurrentTags(tags: string[]): Promise<void> {
-    if (!currentProvider.value || !currentNote.value) return;
+    if (!currentProvider.value || !currentNote.value) {
+      logNotebook.warn('updateCurrentTags SKIP 无 provider 或无当前笔记');
+      return;
+    }
     const updated: SidebarNote = { ...currentNote.value, tags };
     const saved = await currentProvider.value.saveNote(updated);
     currentNote.value = saved;
     await refreshNotes();
+    logNotebook.log('updateCurrentTags OK', { id: saved._id, tags });
   }
 
   async function deleteNote(id: string): Promise<void> {
-    if (!currentProvider.value) return;
+    if (!currentProvider.value) {
+      logNotebook.warn('deleteNote SKIP 无当前 provider');
+      return;
+    }
     await currentProvider.value.deleteNote(id);
     if (currentNote.value && currentNote.value._id === id) {
       currentNote.value = null;
     }
     await refreshNotes();
+    logNotebook.log('deleteNote OK', id);
   }
 
   async function updateNotePath(id: string, newPath: string): Promise<void> {
-    if (!currentProvider.value) return;
+    if (!currentProvider.value) {
+      logNotebook.warn('updateNotePath SKIP 无当前 provider');
+      return;
+    }
     const note = await currentProvider.value.getNote(id);
-    if (!note) return;
+    if (!note) {
+      logNotebook.warn('updateNotePath SKIP 笔记不存在', id);
+      return;
+    }
     const updated: SidebarNote = { ...note, path: newPath };
     const saved = await currentProvider.value.saveNote(updated);
     if (currentNote.value && currentNote.value._id === id) {
       currentNote.value = saved;
     }
     await refreshNotes();
+    logNotebook.log('updateNotePath OK', { id, newPath });
   }
 
   async function updateNoteTags(id: string, tags: string[]): Promise<void> {
-    if (!currentProvider.value) return;
+    if (!currentProvider.value) {
+      logNotebook.warn('updateNoteTags SKIP 无当前 provider');
+      return;
+    }
     const note = await currentProvider.value.getNote(id);
-    if (!note) return;
+    if (!note) {
+      logNotebook.warn('updateNoteTags SKIP 笔记不存在', id);
+      return;
+    }
     const updated: SidebarNote = { ...note, tags };
     const saved = await currentProvider.value.saveNote(updated);
     if (currentNote.value && currentNote.value._id === id) {
       currentNote.value = saved;
     }
     await refreshNotes();
+    logNotebook.log('updateNoteTags OK', { id, tags });
   }
 
   async function sync(direction?: SyncDirection): Promise<void> {
     syncing.value = true;
     syncError.value = null;
     syncProgress.value = '';
+    logNotebook.log('sync REQUEST', { direction: direction || 'both' });
     try {
       if (!currentProvider.value) {
-        syncError.value = '当前没有可用的 provider';
+        const message = '当前没有可用的 provider';
+        logNotebook.warn('sync SKIP', message);
+        syncError.value = message;
         return;
       }
       if (currentProvider.value.type !== 'pouchdb') {
-        syncError.value = 'SyncEngine 需要本地 PouchDB provider 作为同步源';
+        const message = 'SyncEngine 需要本地 PouchDB provider 作为同步源';
+        logNotebook.warn('sync SKIP', message, currentProvider.value.type);
+        syncError.value = message;
         return;
       }
       // 在 providers 列表中寻找一个非 pouchdb 的远端作为同步目标
@@ -293,9 +359,12 @@ export function useNotebook(initialName?: string): UseNotebookReturn {
         (p) => p.type !== 'pouchdb' && p.name !== currentName.value,
       );
       if (!remoteInfo) {
-        syncError.value = '未找到远端 provider（git / webdav）';
+        const message = '未找到远端 provider（git / webdav）';
+        logNotebook.warn('sync SKIP', message);
+        syncError.value = message;
         return;
       }
+      logNotebook.log('sync 目标远端', { name: remoteInfo.name, type: remoteInfo.type });
       const engine = new SyncEngine(
         currentProvider.value as PouchDBProvider,
         remoteInfo.config,
@@ -308,7 +377,10 @@ export function useNotebook(initialName?: string): UseNotebookReturn {
       syncError.value = r.errors.length ? r.errors.join('; ') : null;
       syncProgress.value =
         '完成：推送 ' + r.pushed + '，拉取 ' + r.pulled + '，冲突 ' + r.conflicts;
+      logNotebook.log('sync 结果', r);
+      if (r.errors.length) logNotebook.warn('sync 存在错误', r.errors);
     } catch (e: any) {
+      logNotebook.error('sync FAIL', e);
       syncError.value = String(e && e.message ? e.message : e);
     } finally {
       syncing.value = false;
