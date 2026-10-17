@@ -29,7 +29,8 @@ jobs:
       - name: Build
         run: npm run build
 
+      # OIDC passwordless publish via Trusted Publisher (no NPM_TOKEN needed).
+      # `id-token: write` above lets Actions mint an OIDC token that npm verifies
+      # against the Trusted Publisher configured for this package on npmjs.com.
       - name: Publish
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --provenance
