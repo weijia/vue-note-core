@@ -58,7 +58,11 @@ export class GitProvider implements NotebookProvider {
             url: g.repoUrl,
             ref: g.branch || 'main',
             singleBranch: true,
-            onAuth: g.token ? () => ({ username: 'token', password: g.token }) : undefined,
+            // GitHub 只需 token（username 填占位 'token'）；Gitee 需要 用户名 + 私人令牌
+            onAuth: g.token
+              ? () => ({ username: g.username || 'token', password: g.token })
+              : undefined,
+            corsProxy: g.corsProxy || undefined,
           });
           logGit.log('clone OK', g.repoUrl);
         } catch (e: any) {
@@ -226,7 +230,10 @@ export class GitProvider implements NotebookProvider {
       return result;
     }
     logGit.log('sync START', { direction, url: g.repoUrl, branch: g.branch || 'main' });
-    const onAuth = g.token ? () => ({ username: 'token', password: g.token }) : undefined;
+    const onAuth = g.token
+      ? () => ({ username: g.username || 'token', password: g.token })
+      : undefined;
+    const corsProxy = g.corsProxy || undefined;
     const branch = g.branch || 'main';
     try {
       if (direction === 'pull' || direction === 'both') {
@@ -237,11 +244,12 @@ export class GitProvider implements NotebookProvider {
           ref: branch,
           singleBranch: true,
           onAuth,
+          corsProxy,
         });
         result.pulled++;
       }
       if (direction === 'push' || direction === 'both') {
-        await git.push({ fs: this.fs, http, dir: this.dir, ref: branch, onAuth });
+        await git.push({ fs: this.fs, http, dir: this.dir, ref: branch, onAuth, corsProxy });
         result.pushed++;
       }
     } catch (e: any) {

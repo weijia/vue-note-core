@@ -22,8 +22,19 @@ export interface ProviderConfig {
     repoUrl: string;
     branch?: string;
     token?: string;
+    /** Gitee 等平台需要 用户名 + 私人令牌（password 字段）鉴权时使用 */
+    username?: string;
+    /** gitee.com / github.com 等不返回 CORS 头的平台需要的代理地址 */
+    corsProxy?: string;
     /** 浏览器内 lightning-fs 的工作目录，缺省按 name 自动生成 */
     localPath?: string;
+  };
+  /** Gitee 文档库配置（走 zen-fs-gitee，Gitee REST API v5，无需 git 智能 HTTP / CORS 代理） */
+  gitee?: {
+    owner: string;
+    repo: string;
+    branch?: string;
+    token?: string;
   };
   webdav?: {
     url: string;
@@ -36,7 +47,7 @@ export interface ProviderConfig {
 /** 持久化在 localStorage 的 Provider 元信息 */
 export interface ProviderInfo {
   name: string;
-  type: 'pouchdb' | 'git' | 'webdav';
+  type: 'pouchdb' | 'git' | 'webdav' | 'gitee';
   config: ProviderConfig;
 }
 
@@ -57,7 +68,7 @@ export interface SyncResult {
 
 /** 所有 Provider 实现需要遵循的统一接口 */
 export interface NotebookProvider {
-  readonly type: 'pouchdb' | 'git' | 'webdav';
+  readonly type: 'pouchdb' | 'git' | 'webdav' | 'gitee';
   readonly name: string;
   init(config: ProviderConfig): Promise<void>;
   destroy(): Promise<void>;

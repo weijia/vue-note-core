@@ -349,9 +349,19 @@ export function useNotebook(initialName?: string): UseNotebookReturn {
         return;
       }
       if (currentProvider.value.type !== 'pouchdb') {
-        const message = 'SyncEngine 需要本地 PouchDB provider 作为同步源';
-        logNotebook.warn('sync SKIP', message, currentProvider.value.type);
-        syncError.value = message;
+        // git / gitee 等远端 Provider：直接委托其自身 sync（push/pull 或刷新），
+        // 不走 PouchDB SyncEngine。与消费端「同步」按钮调用 provider.sync('both') 行为一致。
+        logNotebook.log('sync DELEGATE', currentProvider.value.type);
+        const provider = currentProvider.value;
+        if (typeof provider.sync === 'function') {
+          const r = await provider.sync(direction || 'both');
+          await refreshNotes().catch(() => undefined);
+          syncError.value = r.errors.length ? r.errors.join('; ') : null;
+          syncProgress.value =
+            '完成：推送 ' + r.pushed + '，拉取 ' + r.pulled + '，冲突 ' + r.conflicts;
+        } else {
+          syncError.value = '当前 Provider 不支持直接同步';
+        }
         return;
       }
       // 在 providers 列表中寻找一个非 pouchdb 的远端作为同步目标

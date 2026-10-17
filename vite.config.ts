@@ -8,11 +8,19 @@ import dts from 'vite-plugin-dts';
 // 而是直接打包进 dist。原因：pouchdb-browser 经 esm.sh 二次 CJS→ESM 转译时，
 // 在模块求值阶段即抛 `e.on is not a function`，导致 import 该库整脚本崩溃。
 // 把它打进 dist 后，esm.sh 不再单独转译 pouchdb，崩溃消失（已验证）。
+//
+// @zenfs/core / zen-fs-gitee 同样保持【外置】：这两个包在 esm.sh 上二次转译即崩溃
+// （重复注册 / kerium 解析错误）。由消费端在 import map 中指向已验证的自包含 bundle
+// （如本仓库说明的 vendor/zenfs-gitee.bundle.js），并以
+// `?external=@zenfs/core,zen-fs-gitee` 告知 esm.sh 不要解析它们。
+// 类型方面由 src/types-external.d.ts 的 declare module 兜底，无需安装其类型包。
 const external = [
   'vue',
   'isomorphic-git',
   '@isomorphic-git/lightning-fs',
   'webdav',
+  '@zenfs/core',
+  'zen-fs-gitee',
   /^isomorphic-git\//,
 ];
 

@@ -28,6 +28,7 @@ export const DEBUG_NAMESPACES = [
   'note-core:provider',
   'note-core:pouchdb',
   'note-core:git',
+  'note-core:gitee',
   'note-core:webdav',
   'note-core:sync',
   'note-core:utils',
@@ -195,6 +196,7 @@ export const logNotebook = createLogger('note-core:notebook');
 export const logProvider = createLogger('note-core:provider');
 export const logPouchDB = createLogger('note-core:pouchdb');
 export const logGit = createLogger('note-core:git');
+export const logGitee = createLogger('note-core:gitee');
 export const logWebDAV = createLogger('note-core:webdav');
 export const logSync = createLogger('note-core:sync');
 export const logUtils = createLogger('note-core:utils');
