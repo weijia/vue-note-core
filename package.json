@@ -51,6 +51,10 @@
   ],
   "author": "richard432",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/weijia/vue-note-core.git"
+  },
   "publishConfig": {
     "access": "public"
   },
