@@ -1,6 +1,6 @@
 {
   "name": "@richard432/note-core",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Vue 3 组合式函数的笔记核心库：内置 PouchDB / Git / WebDAV 多端 Provider 与 SyncEngine 同步引擎，纯 TypeScript，ESM 构建，可被网页直接调用。",
   "type": "module",
   "main": "./dist/index.mjs",

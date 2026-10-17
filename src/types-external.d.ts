@@ -34,3 +34,32 @@ declare module 'zen-fs-gitee' {
   const _default: any;
   export default _default;
 }
+
+/**
+ * zen-fs-cache：通用的 zen-fs 缓存层。
+ * 同样是运行时外置包（消费端通过 import map 提供），这里只声明最小类型。
+ * 参考 https://npmjs.com/package/zen-fs-cache
+ */
+declare module 'zen-fs-cache' {
+  export class CachedFileSystem {
+    constructor(inner: any, store: any, options?: { ttlMs?: number });
+    readFile(path: string): Promise<Uint8Array>;
+    writeFile(path: string, data: string | Uint8Array | ArrayBuffer, options?: any): Promise<void>;
+    readdir(path: string): Promise<string[]>;
+    stat(path: string): Promise<any>;
+    exists(path: string): Promise<boolean>;
+    mkdir(path: string, options?: any): Promise<any>;
+    rmdir(path: string): Promise<void>;
+    unlink(path: string): Promise<void>;
+    rename(oldPath: string, newPath: string): Promise<void>;
+    read(path: string, buffer: Uint8Array, start: number, end: number): Promise<void>;
+    write(path: string, buffer: Uint8Array, offset: number): Promise<void>;
+  }
+  export class MemoryCacheStore {
+    purgeKeepFiles(): Promise<void>;
+  }
+  export class IdbCacheStore {
+    constructor(prefix?: string, dbName?: string, storeName?: string);
+    purgeKeepFiles(): Promise<void>;
+  }
+}

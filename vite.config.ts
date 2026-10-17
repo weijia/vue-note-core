@@ -21,6 +21,9 @@ const external = [
   'webdav',
   '@zenfs/core',
   'zen-fs-gitee',
+  // zen-fs-cache 是 zen-fs-gitee 的依赖（其 IdbKVStore 用于内容持久化）。
+  // 保持外置 + 由 import map 提供，才能和 zen-fs-gitee 内部那份共用同一个实例/数据库。
+  'zen-fs-cache',
   /^isomorphic-git\//,
 ];
 

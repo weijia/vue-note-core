@@ -37,6 +37,16 @@ export interface ProviderConfig {
     token?: string;
     /** 直接用 Gitee commit 时间作为文件 mtime，跳过 .mtime 边车探测（缺省 false，由 zen-fs-gitee@1.2.33+ 支持） */
     useCommitTimeAsMtime?: boolean;
+    /**
+     * 是否用 zen-fs-cache 的 CachedFileSystem 包装 GiteeFS（缺省 'idb'）：
+     * - 'idb'    ：IndexedDB 持久化，跨刷新直接从本地返回未变更的文件
+     * - 'memory' ：仅本次会话内缓存
+     * - false    ：不包装，每次都走 zen-fs-gitee（其内部仍有自己的 IDB 缓存）
+     *
+     * 校验依据是 GiteeFS.getRevision() 返回的 git blob SHA（零网络），
+     * 因此命中缓存时既不下载内容、也不请求 mtime/Commits API。
+     */
+    cache?: 'idb' | 'memory' | false;
   };
   webdav?: {
     url: string;
