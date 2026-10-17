@@ -54,6 +54,7 @@ export class GiteeProvider implements NotebookProvider {
           owner: g.owner,
           repo: g.repo,
           branch: g.branch || 'master',
+          useCommitTimeAsMtime: g.useCommitTimeAsMtime ?? false,
         });
         giteeCache.set(key, inst);
         logGitee.log('resolveMountConfig OK', { owner: g.owner, repo: g.repo });

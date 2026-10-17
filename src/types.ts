@@ -35,6 +35,8 @@ export interface ProviderConfig {
     repo: string;
     branch?: string;
     token?: string;
+    /** 直接用 Gitee commit 时间作为文件 mtime，跳过 .mtime 边车探测（缺省 false，由 zen-fs-gitee@1.2.33+ 支持） */
+    useCommitTimeAsMtime?: boolean;
   };
   webdav?: {
     url: string;
