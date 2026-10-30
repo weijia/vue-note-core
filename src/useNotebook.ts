@@ -31,6 +31,23 @@ function saveProviders(list: ProviderInfo[]): void {
   }
 }
 
+/**
+ * 比较两篇笔记的「持久化相关字段」是否完全一致（忽略 updatedAt）。
+ * 用于保存前的无变化检测：内容/标题/路径/标签都没变时，不应改写时间戳、
+ * 不应写盘、不应产生空提交。tags 按序精确比较（顺序不同视为有变化）。
+ */
+function noteFieldsEqual(a: SidebarNote, b: SidebarNote): boolean {
+  const aTags = a.tags ?? [];
+  const bTags = b.tags ?? [];
+  return (
+    a.content === b.content &&
+    a.title === b.title &&
+    a.path === b.path &&
+    aTags.length === bTags.length &&
+    aTags.every((t, i) => t === bTags[i])
+  );
+}
+
 export interface UseNotebookReturn {
   providers: Ref<ProviderInfo[]>;
   currentName: Ref<string>;
@@ -256,6 +273,11 @@ export function useNotebook(initialName?: string): UseNotebookReturn {
       content,
       updatedAt: Date.now(),
     };
+    // 内容/元数据均未变化：不改写时间戳、不写盘、不提交
+    if (noteFieldsEqual(updated, currentNote.value)) {
+      logNotebook.log('saveCurrentNote SKIP 内容未变化', { id: currentNote.value._id });
+      return;
+    }
     const saved = await currentProvider.value.saveNote(updated);
     currentNote.value = saved;
     await refreshNotes();
@@ -279,6 +301,10 @@ export function useNotebook(initialName?: string): UseNotebookReturn {
       return;
     }
     const updated: SidebarNote = { ...currentNote.value, tags };
+    if (noteFieldsEqual(updated, currentNote.value)) {
+      logNotebook.log('updateCurrentTags SKIP 未变化', { id: currentNote.value._id });
+      return;
+    }
     const saved = await currentProvider.value.saveNote(updated);
     currentNote.value = saved;
     await refreshNotes();
@@ -309,6 +335,10 @@ export function useNotebook(initialName?: string): UseNotebookReturn {
       return;
     }
     const updated: SidebarNote = { ...note, path: newPath };
+    if (noteFieldsEqual(updated, note)) {
+      logNotebook.log('updateNotePath SKIP 未变化', { id });
+      return;
+    }
     const saved = await currentProvider.value.saveNote(updated);
     if (currentNote.value && currentNote.value._id === id) {
       currentNote.value = saved;
@@ -328,6 +358,10 @@ export function useNotebook(initialName?: string): UseNotebookReturn {
       return;
     }
     const updated: SidebarNote = { ...note, tags };
+    if (noteFieldsEqual(updated, note)) {
+      logNotebook.log('updateNoteTags SKIP 未变化', { id });
+      return;
+    }
     const saved = await currentProvider.value.saveNote(updated);
     if (currentNote.value && currentNote.value._id === id) {
       currentNote.value = saved;
