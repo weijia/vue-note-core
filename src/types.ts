@@ -54,12 +54,22 @@ export interface ProviderConfig {
     password: string;
     rootPath?: string;
   };
+  /**
+   * 数据同步组（zen-fs-config AppDataGroup）配置。
+   * 一个数据同步组 = 一个笔记本；组内多后端自动双向同步。
+   * fs 实例不进 config（config 需可序列化进 localStorage），
+   * 由消费端通过 registerAppDataFS(appId, groupId, group) 注入。
+   */
+  appdata?: {
+    appId: string;
+    groupId: string;
+  };
 }
 
 /** 持久化在 localStorage 的 Provider 元信息 */
 export interface ProviderInfo {
   name: string;
-  type: 'pouchdb' | 'git' | 'webdav' | 'gitee';
+  type: 'pouchdb' | 'git' | 'webdav' | 'gitee' | 'appdata';
   config: ProviderConfig;
 }
 
@@ -80,7 +90,7 @@ export interface SyncResult {
 
 /** 所有 Provider 实现需要遵循的统一接口 */
 export interface NotebookProvider {
-  readonly type: 'pouchdb' | 'git' | 'webdav' | 'gitee';
+  readonly type: 'pouchdb' | 'git' | 'webdav' | 'gitee' | 'appdata';
   readonly name: string;
   init(config: ProviderConfig): Promise<void>;
   destroy(): Promise<void>;
