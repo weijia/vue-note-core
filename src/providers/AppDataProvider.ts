@@ -78,6 +78,17 @@ function appDataKey(appId: string, groupId: string): string {
   return appId + '/' + groupId;
 }
 
+/**
+ * 把 ZenFS FileSystem 实例（同步 API + .promises）归一化为 promises 风格。
+ * 已是 promises 风格的对象原样返回。
+ */
+function normalizePromisesFS(fs: any): any {
+  if (fs && fs.promises && typeof fs.promises.writeFile === 'function') {
+    return fs.promises;
+  }
+  return fs;
+}
+
 export class AppDataProvider extends FsNotesProvider {
   readonly type = 'appdata' as const;
   private handle: AppDataFSHandle | null = null;
@@ -100,7 +111,9 @@ export class AppDataProvider extends FsNotesProvider {
       );
     }
     this.handle = handle;
-    this.fs = handle.fs;
+    // AppDataGroup.fs 是 ZenFS FileSystem 实例（同步 API + .promises 子对象），
+    // 归一化到 promises 风格（FsNotesProvider 的约定）
+    this.fs = normalizePromisesFS(handle.fs);
     this.known = new Map();
     await this.indexNotes();
     logProvider.log('appdata init OK', { name: this.name, appId: a.appId, groupId: a.groupId });
